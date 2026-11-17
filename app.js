@@ -61,6 +61,7 @@ app.get('/:page', (req, res, next) => {
         }
     }
 
+    res.set('Cache-Control', 'no-store');
     next();
 }, (req, res) => {
     const filePath = path.join(__dirname, 'public', `${req.params.page}.html`);

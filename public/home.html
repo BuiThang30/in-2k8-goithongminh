@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Smart Pillow</title>
     <link rel="stylesheet" href="/stylesheets/style.css" />
     <link rel="stylesheet" href="/stylesheets/home.css"/>
@@ -23,7 +25,7 @@
           Smart Pillow
         </h1>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 hdr-actions">
           <button
             id="settingThresholdBtn"
             class="custom-btn btn-setting"
@@ -37,11 +39,58 @@
           >
             🎛️ Điều khiển
           </button>
+
+          <button
+            id="logoutBtn"
+            type="button"
+            class="custom-btn btn-logout"
+          >
+            🚪 Đăng xuất
+          </button>
         </div>
       </div>
     </header>
 
     <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <!-- PILLOW STATUS CARD -->
+      <section class="py-4">
+        <div class="ps-card is-off" id="psCard">
+          <div class="ps-head">
+            <h3>Trạng thái gối</h3>
+            <span class="ps-conn"><span class="ps-dot" id="psDot"></span><span id="psConn">Đang kiểm tra...</span></span>
+          </div>
+
+          <div class="ps-grid">
+            <div class="ps-tile">
+              <div class="ps-label"><span>🎵</span> Nhạc <em class="ps-badge" id="psAuto" hidden>Tự động</em></div>
+              <div class="ps-value" id="psMusicVal">—</div>
+              <div class="ps-sub" id="psMusicSub">&nbsp;</div>
+            </div>
+
+            <div class="ps-tile">
+              <div class="ps-label"><span>💆</span> Massage · tốc độ</div>
+              <div class="ps-value" id="psMassageVal">—</div>
+              <div class="ps-bar"><i id="psMassageBar" style="--c:#10b981"></i></div>
+            </div>
+
+            <div class="ps-tile">
+              <div class="ps-label"><span>🔥</span> Nhiệt · mức</div>
+              <div class="ps-value" id="psHeatVal">—</div>
+              <div class="ps-bar"><i id="psHeatBar" style="--c:#f97316"></i></div>
+            </div>
+
+            <div class="ps-tile">
+              <div class="ps-label"><span>⏰</span> Hẹn giờ tắt</div>
+              <div class="ps-value" id="psTimerVal">—</div>
+              <div class="ps-sub" id="psTimerSub">&nbsp;</div>
+            </div>
+          </div>
+
+          <p class="ps-foot" id="psFoot"></p>
+        </div>
+      </section>
+      <!-- /PILLOW STATUS CARD -->
+
       <!-- heartRate -->
       <section class="py-4">
         <div
@@ -1017,44 +1066,87 @@
       </div>
     </div>
 
-    <!-- MODAL FOR CONTROL -->
+    <!-- MODAL FOR CONTROL (giống web nội bộ của gối) -->
     <div class="modal" id="controlModal">
-      <div class="modal-box">
-        <h3>🎛️ Điều khiển thiết bị</h3>
-
-        <div class="device">
-          <span>Quạt</span>
-          <label class="switch">
-            <input type="checkbox" data-device="fan">
-            <span class="slider"></span>
-          </label>
+      <div class="modal-box pc-box">
+        <div class="pc-head">
+          <div class="pc-title">
+            <h3>Điều khiển gối</h3>
+            <span class="pc-conn"><span class="pc-dot" id="pcDot"></span><span id="pcConn">Đang kiểm tra...</span></span>
+          </div>
+          <button class="pc-x" id="closeControl" type="button" aria-label="Đóng">✕</button>
         </div>
 
-        <div class="device">
-          <span>Đèn</span>
-          <label class="switch">
-            <input type="checkbox" data-device="light">
-            <span class="slider"></span>
-          </label>
-        </div>
+        <div class="pc-body">
+          <p class="pc-alert" id="pcOfflineNote" hidden>
+            Gối chưa kết nối với server nên chưa thể điều khiển. Khi gối kết nối lại, trạng thái sẽ tự cập nhật.
+          </p>
 
-        <div class="device">
-          <span>Máy tạo ẩm</span>
-          <label class="switch">
-            <input type="checkbox" data-device="humidifier">
-            <span class="slider"></span>
-          </label>
-        </div>
+          <section class="pc-card">
+            <button type="button" class="pc-alloff" id="pcAllOff">
+              TẮT TẤT CẢ
+            </button>
+            <p class="pc-note pc-note-top">Tắt massage, nhiệt và nhạc cùng lúc</p>
+          </section>
 
-        <div class="device">
-          <span>Máy lọc không khí</span>
-          <label class="switch">
-            <input type="checkbox" data-device="airpurifier">
-            <span class="slider"></span>
-          </label>
-        </div>
+          <section class="pc-card">
+            <h4>Massage &amp; Nhiệt</h4>
+            <div class="pc-row">
+              <div class="pc-lab"><b>Massage</b><span class="pc-val" id="pcVA">Tắt</span></div>
+              <input type="range" class="pc-range" id="pcMA" min="0" max="100" step="1" value="0" data-c="#10b981" />
+              <div class="pc-ticks"><span>Tắt</span><span>Tối đa</span></div>
+            </div>
+            <div class="pc-row">
+              <div class="pc-lab"><b>Nhiệt</b><span class="pc-val" id="pcVB">Tắt</span></div>
+              <input type="range" class="pc-range" id="pcMB" min="0" max="100" step="1" value="0" data-c="#f97316" />
+              <div class="pc-ticks"><span>Tắt</span><span>Tối đa</span></div>
+            </div>
+            <div class="pc-chips pc-grid4" id="pcPresets">
+              <button type="button" data-p="25">25%</button>
+              <button type="button" data-p="50">50%</button>
+              <button type="button" data-p="75">75%</button>
+              <button type="button" data-p="100">Tối đa</button>
+            </div>
+            <button type="button" class="pc-stop" id="pcStopAll">Tắt massage &amp; nhiệt</button>
+          </section>
 
-        <button class="close-btn" id="closeControl">Đóng</button>
+          <section class="pc-card">
+            <h4>Nhạc</h4>
+            <div class="pc-step">
+              <button type="button" id="pcTrackMinus" aria-label="Bài trước">−</button>
+              <input type="number" id="pcTrack" min="1" max="3000" value="1" inputmode="numeric" />
+              <button type="button" id="pcTrackPlus" aria-label="Bài sau">+</button>
+            </div>
+            <div class="pc-btns">
+              <button type="button" class="pri" id="pcPlay">Phát</button>
+              <button type="button" class="warn" id="pcPause">Tạm dừng</button>
+              <button type="button" id="pcStopMusic">Tắt</button>
+            </div>
+            <div class="pc-row">
+              <div class="pc-lab"><b>Âm lượng</b><span class="pc-val pc-ac" id="pcVVol">15</span></div>
+              <input type="range" class="pc-range" id="pcVol" min="0" max="30" step="1" value="15" data-c="#3A59D1" />
+            </div>
+          </section>
+
+          <section class="pc-card">
+            <h4>Hẹn giờ tắt tất cả</h4>
+            <div class="pc-row">
+              <div class="pc-lab"><b>Thời gian</b><span class="pc-val pc-ac" id="pcVTimer">Không hẹn</span></div>
+              <input type="range" class="pc-range" id="pcTimer" min="0" max="120" step="5" value="0" data-c="#3A59D1" />
+            </div>
+            <div class="pc-chips pc-grid4" id="pcTimerChips">
+              <button type="button" data-t="15">15p</button>
+              <button type="button" data-t="30">30p</button>
+              <button type="button" data-t="45">45p</button>
+              <button type="button" data-t="60">1 giờ</button>
+              <button type="button" data-t="90">1,5 giờ</button>
+              <button type="button" data-t="120">2 giờ</button>
+              <button type="button" data-t="0" class="pc-cancel">Hủy hẹn giờ</button>
+            </div>
+            <div class="pc-cd" id="pcCountdown"></div>
+            <p class="pc-note">Hết giờ sẽ tắt nhạc, massage và nhiệt</p>
+          </section>
+        </div>
       </div>
     </div>
 

@@ -489,34 +489,344 @@ function closeThresholdModal() {
 }
 
 
-const modal = document.getElementById("controlModal");
+/* =====================================================
+ * POPUP ĐIỀU KHIỂN GỐI (giống web nội bộ của gối)
+ *  - Gửi lệnh:  POST /control            (server xếp hàng, gối hỏi mỗi ~1s)
+ *  - Đọc trạng thái thật của gối: GET /control/state
+ * ===================================================== */
+(function initControlPanel() {
+  const $ = (id) => document.getElementById(id);
+  const modal = $("controlModal");
+  const openBtn = $("controlBtn");
+  if (!modal || !openBtn) return;
 
-// mở modal
-document.getElementById("controlBtn").onclick = () => {
-  modal.classList.add("active");
-};
+  const POLL_MS = 1500;
+  let pollTimer = null;
+  let firstSync = true;              // true: lần đồng bộ kế tiếp phải ghi đè toàn bộ giao diện
+  let online = false;                // gối có đang kết nối với server không
+  let touchedAt = 0;                 // lần cuối người dùng chạm vào thanh gạt
+  const touch = () => { touchedAt = Date.now(); };
+  const recentlyTouched = () => Date.now() - touchedAt < 2500;
 
-// đóng modal
-document.getElementById("closeControl").onclick = () => {
-  modal.classList.remove("active");
-};
-
-// xử lý switch
-document.querySelectorAll(".switch input").forEach(sw => {
-  sw.addEventListener("change", async () => {
-    const device = sw.dataset.device;
-    const state = sw.checked ? "1" : "0";
-
-    console.log(device, state);
-    await fetch("/control", {
+  // ---------- gọi API ----------
+  async function post(body) {
+    if (!online) throw new Error("offline");
+    const res = await fetch("/control", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        device,
-        state
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) { window.location.href = "/login"; throw new Error("401"); }
+    if (res.status === 409) { setOnline(false); throw new Error("offline"); }
+    if (!res.ok) throw new Error(res.status);
+    return res.json();
+  }
+
+  // Chỉ 1 request đang chạy, luôn gửi giá trị mới nhất (tránh dồn lệnh khi kéo thanh gạt)
+  function sender(build) {
+    let busy = false, dirty = false;
+    async function go() {
+      if (busy) { dirty = true; return; }
+      busy = true; dirty = false;
+      try { await post(build()); } catch (e) { console.error("Gửi lệnh lỗi:", e); }
+      busy = false;
+      if (dirty) setTimeout(go, 30);
+    }
+    return go;
+  }
+
+  // ---------- hiển thị ----------
+  function paint(el) {
+    const mn = +el.min, mx = +el.max, p = ((+el.value - mn) / (mx - mn)) * 100;
+    const c = el.dataset.c || "#3A59D1";
+    el.style.setProperty("--c", c);
+    el.style.setProperty("--fill", `linear-gradient(to right, ${c} ${p}%, #dbe3ee ${p}%)`);
+  }
+
+  // on = true/false; checking = đang hỏi lần đầu (chưa biết gối online hay chưa)
+  function setOnline(on, checking = false) {
+    const was = online;
+    online = on;
+    $("pcDot").className = "pc-dot" + (on ? " on" : "");
+    $("pcConn").textContent = on ? "Gối đã kết nối" : checking ? "Đang kiểm tra..." : "Gối chưa kết nối";
+    $("pcOfflineNote").hidden = on || checking;
+
+    // chưa kết nối: xám + khóa toàn bộ điều khiển
+    modal.querySelector(".pc-body").classList.toggle("is-off", !on);
+    modal.querySelectorAll(".pc-card button, .pc-card input").forEach((el) => { el.disabled = !on; });
+
+    // vừa kết nối (lại): lấy trạng thái thật của gối đè lên giao diện
+    if (on && !was) firstSync = true;
+  }
+
+  // ---------- MASSAGE & NHIỆT ----------
+  const mv = [0, 0];
+  const mEl = [$("pcMA"), $("pcMB")];
+  const mLab = [$("pcVA"), $("pcVB")];
+  const pushMotors = sender(() => ({ t: "motor", a: mv[0], b: mv[1] }));
+
+  function showMotor(i) {
+    mLab[i].textContent = mv[i] === 0 ? "Tắt" : mv[i] + "%";
+    mLab[i].className = "pc-val " + (mv[i] > 0 ? (i ? "ht" : "fw") : "");
+    mEl[i].value = mv[i];
+    paint(mEl[i]);
+  }
+  // nút % nhanh: sáng lên khi massage và nhiệt đang cùng đúng mức đó
+  function showPresets() {
+    Array.from($("pcPresets").children).forEach((b) => {
+      b.classList.toggle("sel", mv[0] > 0 && mv[0] === mv[1] && +b.dataset.p === mv[0]);
+    });
+  }
+  function setMotor(i, v) { mv[i] = v; showMotor(i); showPresets(); }
+
+  mEl.forEach((el, i) => {
+    el.addEventListener("input", () => { touch(); setMotor(i, +el.value); pushMotors(); });
+    el.addEventListener("change", () => {          // thả tay: gần 0 thì về 0 hẳn
+      if (mv[i] > 0 && mv[i] <= 5) { setMotor(i, 0); pushMotors(); }
     });
   });
-});
+
+  $("pcPresets").addEventListener("click", (e) => {
+    const p = e.target.dataset.p;
+    if (p === undefined) return;
+    touch();
+    setMotor(0, +p); setMotor(1, +p);
+    pushMotors();
+  });
+
+  // "Tắt massage & nhiệt": chỉ tắt 2 động cơ, nhạc giữ nguyên
+  $("pcStopAll").addEventListener("click", () => {
+    touch();
+    setMotor(0, 0); setMotor(1, 0);
+    post({ t: "mstop" }).catch(() => {});
+  });
+
+  // "TẮT TẤT CẢ": massage + nhiệt + nhạc
+  $("pcAllOff").addEventListener("click", () => {
+    touch();
+    setMotor(0, 0); setMotor(1, 0);
+    post({ t: "alloff" }).catch(() => {});
+  });
+
+  // ---------- NHẠC ----------
+  const trackEl = $("pcTrack");
+  function track() {
+    let t = parseInt(trackEl.value, 10);
+    if (Number.isNaN(t) || t < 1) t = 1;
+    if (t > 3000) t = 3000;
+    trackEl.value = t;
+    return t;
+  }
+  $("pcTrackMinus").onclick = () => { trackEl.value = track() - 1; track(); };
+  $("pcTrackPlus").onclick = () => { trackEl.value = track() + 1; track(); };
+  trackEl.addEventListener("change", track);
+  trackEl.addEventListener("input", touch);
+  $("pcPlay").onclick = () => post({ t: "play", track: track() }).catch(() => {});
+  $("pcPause").onclick = () => post({ t: "pause" }).catch(() => {});
+  $("pcStopMusic").onclick = () => post({ t: "stop" }).catch(() => {});
+
+  let vol = 15;
+  const volEl = $("pcVol");
+  const pushVol = sender(() => ({ t: "vol", volume: vol }));
+  function showVol() { $("pcVVol").textContent = vol; volEl.value = vol; paint(volEl); }
+  volEl.addEventListener("input", () => { touch(); vol = +volEl.value; showVol(); pushVol(); });
+
+  // ---------- HẸN GIỜ ----------
+  const tmrEl = $("pcTimer");
+  function fmtT(m) {
+    if (m === 0) return "Không hẹn";
+    if (m < 60) return m + " phút";
+    return Math.floor(m / 60) + " giờ" + (m % 60 ? " " + (m % 60) + " phút" : "");
+  }
+  function showTimer(m) {
+    tmrEl.value = Math.min(m, +tmrEl.max);
+    paint(tmrEl);
+    $("pcVTimer").textContent = fmtT(m);
+    Array.from($("pcTimerChips").children).forEach((b) => {
+      b.classList.toggle("sel", m > 0 && +b.dataset.t === m);
+    });
+  }
+  const sendTimer = (m) => post({ t: "timer", minutes: m }).catch(() => {});
+  tmrEl.addEventListener("input", () => { touch(); showTimer(+tmrEl.value); });
+  tmrEl.addEventListener("change", () => sendTimer(+tmrEl.value));
+  $("pcTimerChips").addEventListener("click", (e) => {
+    const t = e.target.dataset.t;
+    if (t === undefined) return;
+    touch(); showTimer(+t); sendTimer(+t);
+  });
+
+  // ---------- ĐỒNG BỘ TRẠNG THÁI TỪ GỐI ----------
+  async function poll() {
+    try {
+      const res = await fetch("/control/state");
+      if (res.status === 401) { window.location.href = "/login"; return; }
+      if (!res.ok) throw new Error(res.status);
+      const d = await res.json();
+      setOnline(d.online);
+
+      if (firstSync || !recentlyTouched()) {
+        setMotor(0, d.a); setMotor(1, d.b);
+        vol = d.volume; showVol();
+        showTimer(d.timer || 0);
+        if (firstSync) trackEl.value = d.track;
+        if (d.online) firstSync = false;   // gối chưa kết nối thì lần sau vẫn đồng bộ lại
+      }
+
+      $("pcCountdown").textContent = "";
+      if (d.online && d.timerActive && d.remain > 0) {
+        const m = Math.floor(d.remain / 60), s = d.remain % 60;
+        $("pcCountdown").textContent = `Còn lại ${m}:${s < 10 ? "0" : ""}${s}`;
+      }
+    } catch (e) {
+      setOnline(false);
+    }
+  }
+
+  // ---------- mở / đóng ----------
+  openBtn.onclick = () => {
+    modal.classList.add("active");
+    firstSync = true;
+    setOnline(false, true);            // chờ kết quả hỏi đầu tiên: xám + "Đang kiểm tra..."
+    poll();
+    pollTimer = setInterval(poll, POLL_MS);
+  };
+  function closePanel() {
+    modal.classList.remove("active");
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  $("closeControl").onclick = closePanel;
+  modal.addEventListener("click", (e) => { if (e.target === modal) closePanel(); });
+
+  showMotor(0); showMotor(1); showVol(); showTimer(0);
+})();
+
+
+/* =====================================================
+ * THẺ "TRẠNG THÁI GỐI" Ở TRANG CHÍNH
+ *  Gối báo trạng thái lên server mỗi ~1 giây (bài đang phát, âm lượng,
+ *  tốc độ massage, mức nhiệt, hẹn giờ); trang này đọc lại qua GET /control/state.
+ * ===================================================== */
+(function initPillowStatus() {
+  const card = document.getElementById("psCard");
+  if (!card) return;
+  const $ = (id) => document.getElementById(id);
+
+  // Module DFPlayer chỉ biết SỐ bài. Muốn hiện tên bài thì điền vào đây, ví dụ:
+  //   const TRACK_NAMES = { 1: "Tiếng mưa", 2: "Nhạc piano", 3: "Sóng biển" };
+  const TRACK_NAMES = {};
+
+  const POLL_MS = 2000;
+  let last = null;          // dữ liệu /control/state gần nhất
+  let fetchedAt = 0;        // thời điểm nhận dữ liệu đó (để đếm ngược mượt mỗi giây)
+
+  const trackLabel = (n) => (TRACK_NAMES[n] ? `Bài ${n} · ${TRACK_NAMES[n]}` : `Bài ${n}`);
+  const fmtClock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+  function fmtTimerSet(m) {
+    if (m < 60) return `${m} phút`;
+    return `${Math.floor(m / 60)} giờ` + (m % 60 ? ` ${m % 60} phút` : "");
+  }
+  function fmtAgo(s) {
+    if (s < 5) return "vừa xong";
+    if (s < 60) return `${s} giây trước`;
+    if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
+    return `${Math.floor(s / 3600)} giờ trước`;
+  }
+
+  function render() {
+    const d = last;
+    const online = !!(d && d.online);
+    const seen = !!(d && d.ago !== null);
+
+    card.classList.toggle("is-off", !online);
+    $("psConn").textContent = !d ? "Đang kiểm tra..." : online ? "Gối đã kết nối" : "Gối chưa kết nối";
+
+    if (!seen) {      // chưa từng nhận dữ liệu từ gối -> không có gì để hiển thị
+      ["psMusicVal", "psMassageVal", "psHeatVal", "psTimerVal"].forEach((id) => { $(id).textContent = "—"; });
+      ["psMusicSub", "psTimerSub"].forEach((id) => { $(id).textContent = "\u00a0"; $(id).className = "ps-sub"; });
+      $("psMassageBar").style.width = "0%";
+      $("psHeatBar").style.width = "0%";
+      $("psAuto").hidden = true;
+      $("psFoot").textContent = d ? "Chưa nhận được dữ liệu nào từ gối." : "";
+      return;
+    }
+
+    // Nhạc
+    const musicSub = $("psMusicSub");
+    if (d.playing) {
+      $("psMusicVal").textContent = trackLabel(d.track);
+      musicSub.textContent = (online ? "" : "Lần cuối: ") + `Đang phát · âm lượng ${d.volume}/30`;
+      musicSub.className = online ? "ps-sub on" : "ps-sub";
+    } else {
+      $("psMusicVal").textContent = "Không phát";
+      musicSub.textContent = `Bài gần nhất: ${d.track} · âm lượng ${d.volume}/30`;
+      musicSub.className = "ps-sub";
+    }
+    $("psAuto").hidden = !(d.playing && d.auto);
+
+    // Massage & nhiệt (0-100%)
+    $("psMassageVal").textContent = d.a > 0 ? `${d.a}%` : "Tắt";
+    $("psMassageBar").style.width = `${d.a}%`;
+    $("psHeatVal").textContent = d.b > 0 ? `${d.b}%` : "Tắt";
+    $("psHeatBar").style.width = `${d.b}%`;
+
+    // Hẹn giờ (đếm ngược mỗi giây giữa hai lần hỏi server)
+    const remain = d.timerActive ? Math.max(0, d.remain - Math.floor((Date.now() - fetchedAt) / 1000)) : 0;
+    if (d.timerActive && remain > 0) {
+      $("psTimerVal").textContent = fmtClock(remain);
+      $("psTimerSub").textContent = `Hẹn ${fmtTimerSet(d.timer)} · hết giờ tắt tất cả`;
+      $("psTimerSub").className = "ps-sub on";
+    } else {
+      $("psTimerVal").textContent = "Không hẹn";
+      $("psTimerSub").textContent = "Chưa đặt hẹn giờ";
+      $("psTimerSub").className = "ps-sub";
+    }
+
+    $("psFoot").textContent = online
+      ? ""
+      : `Gối mất kết nối ${fmtAgo(d.ago + Math.floor((Date.now() - fetchedAt) / 1000))} — đang hiển thị trạng thái cuối cùng.`;
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch("/control/state");
+      if (res.status === 401) { window.location.href = "/login"; return; }
+      if (!res.ok) throw new Error(res.status);
+      last = await res.json();
+      fetchedAt = Date.now();
+    } catch (e) {
+      if (last) last.online = false;      // lỗi mạng/server: coi như chưa kết nối
+    }
+    render();
+  }
+
+  poll();
+  setInterval(poll, POLL_MS);
+  setInterval(render, 1000);
+})();
+
+
+/* =====================================================
+ * ĐĂNG XUẤT + ĐỒNG BỘ deviceID THEO TÀI KHOẢN ĐANG ĐĂNG NHẬP
+ * ===================================================== */
+(function initAuth() {
+  // deviceID luôn lấy theo session trên server, không tin giá trị sửa tay trong localStorage
+  fetch("/auth/me", { credentials: "include" })
+    .then((r) => r.json())
+    .then((d) => {
+      if (!d.loggedIn) { window.location.href = "/login"; return; }
+      localStorage.setItem("deviceID", d.user.deviceID);
+    })
+    .catch(() => {});
+
+  const btn = document.getElementById("logoutBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (!confirm("Đăng xuất khỏi Smart Pillow?")) return;
+    localStorage.removeItem("deviceID");
+    window.location.href = "/auth/logout";
+  });
+})();
+
+// iOS Safari: cần có listener touchstart thì :active mới chạy khi chạm nút
+document.addEventListener("touchstart", function () {}, { passive: true });
