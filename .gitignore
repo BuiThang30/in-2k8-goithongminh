@@ -65,3 +65,7 @@ test.js
 test.txt
 TODO.md
 response.txt
+
+#
+seedFakeSleep.js
+testTelegram.js
