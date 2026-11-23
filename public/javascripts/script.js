@@ -217,20 +217,26 @@ loadChart();
  * 4) Sleep Analysis Modal Functions
  **************************************/
 
-// Fetch last report data
-async function fetchLastReport() {
+// Danh sách ngày đã có báo cáo (mới -> cũ)
+let reportList = [];      // [{sleepStatID, reportDate, overallScore, qualityLevel, ...}]
+let reportIndex = 0;      // vị trí đang xem trong reportList
+let reportReqToken = 0;   // bỏ kết quả cũ nếu người dùng bấm chuyển ngày nhanh
+
+async function fetchJSON(url) {
     try {
-        const res = await fetch(`/statistic/last-report?deviceID=${getDeviceID()}`);
-
+        const res = await fetch(url, { credentials: "include" });
+        if (res.status === 401) { window.location.href = "/login"; return { success: false, error: "Chưa đăng nhập" }; }
         if (!res.ok) throw new Error("Network error");
-
-        const data = await res.json();
-        return data;
-
+        return await res.json();
     } catch (err) {
-        console.error("Fetch last report error:", err);
+        console.error("Fetch error:", url, err);
         return { success: false, error: err.message };
     }
+}
+
+// Fetch last report data
+function fetchLastReport() {
+    return fetchJSON("/statistic/last-report");
 }
 
 // Format date from YYYY-MM-DD or timestamp
@@ -268,7 +274,8 @@ function populateModal(report) {
     document.getElementById('qualityLevel').textContent = formatQualityLevel(report.qualityLevel);
 
     // Sleep metrics
-    document.getElementById('totalSleepHours').textContent = report.totalSleepHours || '-';
+    document.getElementById('totalSleepHours').textContent =
+        report.totalSleepHours ? Number(report.totalSleepHours).toFixed(1) : '-';
     document.getElementById('sleepEfficiency').textContent = report.sleepEfficiency || '-';
     document.getElementById('deepSleepPercent').textContent =
         report.deepSleepPercent ? report.deepSleepPercent.toFixed(1) : '-';
@@ -326,14 +333,83 @@ function showContentState() {
     document.getElementById('contentState').classList.remove('hidden');
 }
 
+// ===== Chọn ngày báo cáo =====
+function dateLabel(r) {
+    const score = r.overallScore != null ? ` - ${Math.round(r.overallScore)} điểm` : '';
+    return `${formatDate(r.reportDate)}${score}`;
+}
+
+function renderReportNav() {
+    const nav = document.getElementById('reportNav');
+    const select = document.getElementById('reportDateSelect');
+    if (!reportList.length) { nav.classList.add('hidden'); return; }
+    nav.classList.remove('hidden');
+
+    // gom theo tháng cho dễ tìm
+    select.innerHTML = '';
+    let group = null, groupKey = '';
+    reportList.forEach((r, i) => {
+        const key = String(r.reportDate).slice(0, 7);
+        if (key !== groupKey) {
+            groupKey = key;
+            group = document.createElement('optgroup');
+            const [y, m] = key.split('-');
+            group.label = `Tháng ${parseInt(m, 10)}/${y}`;
+            select.appendChild(group);
+        }
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = dateLabel(r);
+        group.appendChild(opt);
+    });
+    syncReportNav();
+}
+
+function syncReportNav() {
+    document.getElementById('reportDateSelect').value = String(reportIndex);
+    // index 0 = mới nhất; "Ngày trước" đi tới index lớn hơn
+    document.getElementById('reportPrev').disabled = reportIndex >= reportList.length - 1;
+    document.getElementById('reportNext').disabled = reportIndex <= 0;
+    document.getElementById('reportLatest').disabled = reportIndex === 0;
+}
+
+async function showReportAt(index) {
+    if (index < 0 || index >= reportList.length) return;
+    reportIndex = index;
+    syncReportNav();
+    const token = ++reportReqToken;
+    showLoadingState();
+
+    const result = await fetchJSON(`/statistic/${reportList[index].sleepStatID}`);
+    if (token !== reportReqToken) return;   // đã chuyển sang ngày khác
+
+    if (result.success && result.data) {
+        populateModal(result.data);
+        showContentState();
+        document.querySelector('#analysisModal .overflow-y-auto').scrollTop = 0;
+    } else {
+        showErrorState(result.error || 'Không tìm thấy báo cáo');
+    }
+}
+
 // Open modal and load data
 async function openAnalysisModal() {
     const modal = document.getElementById('analysisModal');
     modal.classList.remove('hidden');
     showLoadingState();
 
-    const result = await fetchLastReport();
+    const list = await fetchJSON('/statistic/dates');
+    reportList = (list.success && Array.isArray(list.data)) ? list.data : [];
 
+    if (reportList.length) {
+        renderReportNav();
+        await showReportAt(0);          // mặc định: đêm gần nhất
+        return;
+    }
+
+    // Không lấy được danh sách ngày: thử lấy báo cáo mới nhất như trước
+    document.getElementById('reportNav').classList.add('hidden');
+    const result = await fetchLastReport();
     if (result.success && result.data && result.data.length > 0) {
         populateModal(result.data[0]);
         showContentState();
@@ -362,6 +438,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const closeModalBtn = document.getElementById('closeModal');
     const modal = document.getElementById('analysisModal');
     const settingThresholdBtn = document.getElementById("settingThresholdBtn");
+
+    // Chuyển ngày báo cáo
+    const prevBtn = document.getElementById('reportPrev');
+    const nextBtn = document.getElementById('reportNext');
+    const latestBtn = document.getElementById('reportLatest');
+    const dateSelect = document.getElementById('reportDateSelect');
+    if (prevBtn) prevBtn.addEventListener('click', () => showReportAt(reportIndex + 1));
+    if (nextBtn) nextBtn.addEventListener('click', () => showReportAt(reportIndex - 1));
+    if (latestBtn) latestBtn.addEventListener('click', () => showReportAt(0));
+    if (dateSelect) dateSelect.addEventListener('change', () => showReportAt(parseInt(dateSelect.value, 10)));
 
     // Open modal on button click
     if (analysisBtn) {
@@ -415,8 +501,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    // Close modal on Escape key
+    // Close modal on Escape key; ← → để chuyển ngày khi đang xem báo cáo
     document.addEventListener('keydown', function (e) {
+        const open = modal && !modal.classList.contains('hidden');
+        if (open && e.key === 'ArrowLeft' && document.activeElement !== dateSelect) showReportAt(reportIndex + 1);
+        if (open && e.key === 'ArrowRight' && document.activeElement !== dateSelect) showReportAt(reportIndex - 1);
         if (e.key === 'Escape') {
             closeAnalysisModal();
             closeThresholdModal();

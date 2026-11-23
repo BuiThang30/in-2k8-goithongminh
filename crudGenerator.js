@@ -160,7 +160,7 @@ async function checkThresholdsAndAlert(data, deviceID, isTest = false) {
 
             const message = `🚨 **CẢNH BÁO MÔI TRƯỜNG NGỦ**\n\n` +
                 `Thiết bị: ${deviceID}\n` +
-                `Thời gian: ${new Date().toLocaleString('vi-VN')}\n\n` +
+                `Thời gian: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}\n\n` +
                 alerts.join('\n') +
                 `\n\nKhuyến nghị kiểm tra điều kiện phòng ngủ!`;
 
@@ -198,7 +198,7 @@ async function checkThresholdsAndAlert(data, deviceID, isTest = false) {
         if (alerts.length > 0) {
             const message = `🚨 **CẢNH BÁO MÔI TRƯỜNG NGỦ**\n\n` +
                 `Thiết bị: ${deviceID}\n` +
-                `Thời gian: ${new Date().toLocaleString('vi-VN')}\n\n` +
+                `Thời gian: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}\n\n` +
                 alerts.join('\n') +
                 `\n\nKhuyến nghị kiểm tra điều kiện phòng ngủ!`;
 
@@ -247,3 +247,4 @@ async function sendTelegramMessage(message) {
 // checkThresholdsAndAlert(null, 1, true)
 
 module.exports = createCRUDRoute;
+module.exports.checkThresholdsAndAlert = checkThresholdsAndAlert;   // dùng cho testAlert.js
