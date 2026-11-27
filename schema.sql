@@ -122,3 +122,14 @@ CREATE TABLE IF NOT EXISTS users (
     password TEXT NOT NULL,
     createdAt INTEGER DEFAULT (strftime('%s','now'))
 );
+
+-- Đánh dấu ngày: ngày đó gối đang đo ai --
+CREATE TABLE IF NOT EXISTS dayMarks (
+    deviceID INTEGER NOT NULL,
+    day TEXT NOT NULL,            -- YYYY-MM-DD
+    name TEXT NOT NULL,
+    age INTEGER,
+    color TEXT NOT NULL DEFAULT '#f59e0b',
+    updatedAt INTEGER DEFAULT (strftime('%s','now')),
+    PRIMARY KEY (deviceID, day)
+);

@@ -540,6 +540,7 @@ img, svg, canvas { max-width: 100%; }
 .an-nav-btn:hover:not(:disabled) { background: #eef2ff; border-color: #6366f1; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(99, 102, 241, .18); }
 .an-nav-btn:active:not(:disabled) { transform: scale(.93); background: #c7d2fe; box-shadow: inset 0 2px 5px rgba(15, 23, 42, .18); }
 .an-nav-btn:disabled { opacity: .4; cursor: not-allowed; }
+.an-nav-btn.active, .an-nav-btn.active:hover:not(:disabled) { background: #6366f1; border-color: #4f46e5; color: #fff; box-shadow: 0 4px 12px rgba(99, 102, 241, .35); }
 .an-nav-latest { background: #6366f1; border-color: #6366f1; color: #fff; }
 .an-nav-latest:hover:not(:disabled) { background: #4f46e5; }
 .an-nav-latest:active:not(:disabled) { background: #3730a3; }
@@ -550,7 +551,54 @@ img, svg, canvas { max-width: 100%; }
 }
 .an-select:hover { border-color: #6366f1; }
 .an-select:focus-visible { outline: 3px solid rgba(99, 102, 241, .35); outline-offset: 2px; }
+/* Đánh dấu người được đo */
+.rcal-form { min-width: 0; padding-left: 20px; border-left: 1px solid #e5e7eb; text-align: left; }
+
+.rcal-form-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #334155; }
+.rcal-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: flex-end; }
+.rcal-row label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #475569; flex: 1 1 120px; }
+.rcal-row label.grow { flex: 2 1 150px; }
+.rcal-row label.age { flex: 0 1 70px; }
+.rcal-row label.clr { flex: 0 0 54px; }
+.rcal-row input { height: 34px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: #fff; color: #1e293b; min-width: 0; }
+.rcal-row input[type=color] { padding: 2px; cursor: pointer; }
+.rcal-row .an-nav-btn { height: 34px; flex: 1 1 auto; }
+.rcal-msg { margin: 0; min-height: 16px; font-size: 12px; color: #475569; }
+.rcal-msg.err { color: #dc2626; }
+.rcal-people { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rcal-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 999px; font-size: 12px; background: #fff; color: #334155; cursor: pointer; }
+.rcal-chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.rcal-day.marked { border-width: 2px; }
+.rcal-day.pick { outline: 2px dashed #0f172a; outline-offset: -3px; }
+.rcal-day.mk-only { cursor: pointer; }
+.rcal-day { position: relative; }
+.rcal-day .mk { position: absolute; left: 3px; right: 3px; top: 3px; height: 4px; border-radius: 2px; }
+
+/* Lịch ngày có dữ liệu */
+.rcal { padding: 12px 16px 14px; background: #fff; border-bottom: 1px solid #e5e7eb; max-width: 780px; margin: 0 auto; width: 100%;
+  display: grid; grid-template-columns: minmax(280px, 340px) minmax(260px, 1fr); gap: 0 20px; align-items: start; }
+.rcal.hidden { display: none; }
+.rcal-main { min-width: 0; }
+.rcal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.rcal-head .an-nav-btn { height: 32px; padding: 0 12px; }
+.rcal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.rcal-dow { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 4px; }
+.rcal-day { height: 36px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #94a3b8; font-size: 14px; cursor: default; }
+.rcal-day.has { background: #e0e7ff; border-color: #a5b4fc; color: #3730a3; font-weight: 700; cursor: pointer; position: relative; }
+.rcal-day.has::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #6366f1; }
+.rcal-day.has:hover { background: #c7d2fe; }
+.rcal-day.sel { background: #6366f1; border-color: #4f46e5; color: #fff; }
+.rcal-day.sel::after { background: #fff; }
+.rcal-legend { margin: 10px 0 0; font-size: 12px; color: #475569; text-align: center; }
+.rcal-dot { display: inline-block; width: 12px; height: 12px; border-radius: 4px; background: #e0e7ff; border: 1px solid #a5b4fc; vertical-align: -2px; }
+.rcal-dot-sel { background: #6366f1; border-color: #4f46e5; }
 @media (max-width: 520px) {
   .an-select { order: -1; flex: 1 1 100%; }
   .an-nav-btn { flex: 1 1 auto; }
+}
+
+/* Lịch + form: xếp chồng trên màn hình nhỏ (đặt cuối file để thắng các luật phía trên) */
+@media (max-width: 700px) {
+  .rcal { grid-template-columns: 1fr; max-width: 360px; }
+  .rcal-form { margin-top: 12px; padding: 10px 0 0; border-left: 0; border-top: 1px solid #e5e7eb; }
 }

@@ -69,3 +69,4 @@ response.txt
 #
 seedFakeSleep.js
 testTelegram.js
+cleanDb.js 

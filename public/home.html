@@ -534,6 +534,42 @@
           <select id="reportDateSelect" class="an-select" aria-label="Chọn ngày báo cáo"></select>
           <button id="reportNext" type="button" class="an-nav-btn">Ngày sau ›</button>
           <button id="reportLatest" type="button" class="an-nav-btn an-nav-latest">Mới nhất</button>
+          <button id="reportCalBtn" type="button" class="an-nav-btn" aria-expanded="false" aria-controls="reportCal">📅 Lịch</button>
+        </div>
+
+        <!-- Lịch đánh dấu ngày có dữ liệu -->
+        <div id="reportCal" class="rcal hidden" role="dialog" aria-label="Lịch ngày có dữ liệu">
+         <div class="rcal-main">
+          <div class="rcal-head">
+            <button id="rcalPrev" type="button" class="an-nav-btn" aria-label="Tháng trước">‹</button>
+            <strong id="rcalTitle"></strong>
+            <button id="rcalNext" type="button" class="an-nav-btn" aria-label="Tháng sau">›</button>
+          </div>
+          <div class="rcal-grid rcal-dow"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span></div>
+          <div id="rcalDays" class="rcal-grid"></div>
+          <p class="rcal-legend"><i class="rcal-dot"></i> Ngày có dữ liệu &nbsp; <i class="rcal-dot rcal-dot-sel"></i> Đang xem</p>
+         </div>
+
+          <!-- Đánh dấu ngày đang đo ai -->
+          <form id="rcalMarkForm" class="rcal-form" autocomplete="off">
+            <p class="rcal-form-title">Đánh dấu người được đo</p>
+            <div class="rcal-row">
+              <label>Từ ngày <input type="date" id="rmFrom" required></label>
+              <label>Đến ngày <input type="date" id="rmTo"></label>
+            </div>
+            <div class="rcal-row">
+              <label class="grow">Tên <input type="text" id="rmName" maxlength="40" placeholder="VD: Nguyễn Văn A" required list="rmNames"></label>
+              <datalist id="rmNames"></datalist>
+              <label class="age">Tuổi <input type="number" id="rmAge" min="1" max="120" inputmode="numeric"></label>
+              <label class="clr">Màu <input type="color" id="rmColor" value="#f59e0b"></label>
+            </div>
+            <div class="rcal-row">
+              <button type="submit" class="an-nav-btn an-nav-latest">Lưu đánh dấu</button>
+              <button type="button" id="rmDelete" class="an-nav-btn">Xóa đánh dấu</button>
+            </div>
+            <p id="rmMsg" class="rcal-msg" role="status"></p>
+            <div id="rmLegend" class="rcal-people"></div>
+          </form>
         </div>
 
         <!-- Modal Content -->

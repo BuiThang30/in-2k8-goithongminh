@@ -365,8 +365,163 @@ function renderReportNav() {
     syncReportNav();
 }
 
+// ===== Lịch đánh dấu ngày có dữ liệu =====
+let calYear = 0, calMonth = 0;   // calMonth: 0..11
+
+function reportDayKey(r) { return String(r.reportDate).slice(0, 10); }
+
+let dayMarks = new Map();   // 'YYYY-MM-DD' -> {name, age, color}
+let pickDay = '';           // ngày đang chọn để đánh dấu
+
+async function sendJSON(url, method, body) {
+    try {
+        const res = await fetch(url, {
+            method, credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        if (res.status === 401) { window.location.href = '/login'; return { success: false, error: 'Chưa đăng nhập' }; }
+        return await res.json();
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+}
+
+async function loadDayMarks() {
+    const r = await fetchJSON('/statistic/marks');
+    dayMarks = new Map();
+    if (r.success && Array.isArray(r.data)) r.data.forEach((m) => dayMarks.set(m.day, m));
+}
+
+function markText(m) { return m.age ? `${m.name} (${m.age} tuổi)` : m.name; }
+
+function setMarkMsg(text, isErr) {
+    const el = document.getElementById('rmMsg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('err', !!isErr);
+}
+
+function fillMarkForm(key) {
+    pickDay = key;
+    document.getElementById('rmFrom').value = key;
+    document.getElementById('rmTo').value = '';
+    const m = dayMarks.get(key);
+    if (m) {
+        document.getElementById('rmName').value = m.name;
+        document.getElementById('rmAge').value = m.age ?? '';
+        document.getElementById('rmColor').value = m.color;
+    }
+    setMarkMsg(m ? `Ngày ${key.split('-').reverse().join('/')}: ${markText(m)}` : '');
+}
+
+function renderMarkLegend() {
+    const box = document.getElementById('rmLegend');
+    const list = document.getElementById('rmNames');
+    if (!box) return;
+    const people = new Map();
+    dayMarks.forEach((m) => {
+        const k = `${m.name}|${m.age ?? ''}|${m.color}`;
+        const e = people.get(k) || { ...m, n: 0 };
+        e.n++; people.set(k, e);
+    });
+    box.innerHTML = '';
+    if (list) list.innerHTML = '';
+    people.forEach((m) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'rcal-chip';
+        chip.title = 'Bấm để dùng lại tên, tuổi, màu này';
+        chip.innerHTML = '<i></i><span></span>';
+        chip.querySelector('i').style.background = m.color;
+        chip.querySelector('span').textContent = `${markText(m)} · ${m.n} ngày`;
+        chip.addEventListener('click', () => {
+            document.getElementById('rmName').value = m.name;
+            document.getElementById('rmAge').value = m.age ?? '';
+            document.getElementById('rmColor').value = m.color;
+        });
+        box.appendChild(chip);
+        if (list) { const o = document.createElement('option'); o.value = m.name; list.appendChild(o); }
+    });
+}
+
+function renderReportCal() {
+    const box = document.getElementById('rcalDays');
+    if (!box) return;
+    const byDay = new Map();
+    reportList.forEach((r, i) => { if (!byDay.has(reportDayKey(r))) byDay.set(reportDayKey(r), i); });
+    const selKey = reportList[reportIndex] ? reportDayKey(reportList[reportIndex]) : '';
+
+    document.getElementById('rcalTitle').textContent = `Tháng ${calMonth + 1}/${calYear}`;
+    const first = new Date(Date.UTC(calYear, calMonth, 1));
+    const lead = (first.getUTCDay() + 6) % 7;                              // thứ 2 là cột đầu
+    const days = new Date(Date.UTC(calYear, calMonth + 1, 0)).getUTCDate();
+    box.innerHTML = '';
+    for (let i = 0; i < lead; i++) box.appendChild(document.createElement('span'));
+    for (let d = 1; d <= days; d++) {
+        const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const idx = byDay.get(key);
+        const mark = dayMarks.get(key);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rcal-day' + (idx !== undefined ? ' has' : ' mk-only') + (key === selKey ? ' sel' : '')
+            + (mark ? ' marked' : '') + (key === pickDay ? ' pick' : '');
+        b.textContent = String(d);
+        const tips = [];
+        if (idx !== undefined) tips.push(dateLabel(reportList[idx]));
+        if (mark) {
+            tips.push('Đo: ' + markText(mark));
+            if (key !== selKey) { b.style.background = mark.color + '33'; }
+            b.style.borderColor = mark.color;
+            const bar = document.createElement('i');
+            bar.className = 'mk';
+            bar.style.background = mark.color;
+            b.appendChild(bar);
+        }
+        if (tips.length) b.title = tips.join(' - ');
+        b.addEventListener('click', () => {
+            fillMarkForm(key);                 // mở lại 📅 Lịch sẽ thấy form đã điền sẵn ngày này
+            closeReportCal();                  // chọn ngày xong thì tự ẩn lịch
+            if (idx !== undefined) showReportAt(idx);
+        });
+        box.appendChild(b);
+    }
+}
+
+function closeReportCal() {
+    const cal = document.getElementById('reportCal');
+    const btn = document.getElementById('reportCalBtn');
+    if (cal) cal.classList.add('hidden');
+    if (btn) { btn.classList.remove('active'); btn.setAttribute('aria-expanded', 'false'); }
+}
+
+function openReportCal() {
+    const cal = document.getElementById('reportCal');
+    const btn = document.getElementById('reportCalBtn');
+    const willOpen = cal.classList.contains('hidden');
+    cal.classList.toggle('hidden', !willOpen);
+    btn.classList.toggle('active', willOpen);
+    btn.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) { syncReportCalMonth(); loadDayMarks().then(() => { renderReportCal(); renderMarkLegend(); }); }
+}
+
+function syncReportCalMonth() {
+    const r = reportList[reportIndex];
+    if (r) { const [y, m] = reportDayKey(r).split('-'); calYear = +y; calMonth = +m - 1; }
+    renderReportCal();
+}
+
+function shiftReportCal(delta) {
+    calMonth += delta;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderReportCal();
+}
+
 function syncReportNav() {
     document.getElementById('reportDateSelect').value = String(reportIndex);
+    const cal = document.getElementById('reportCal');
+    if (cal && !cal.classList.contains('hidden')) syncReportCalMonth();
     // index 0 = mới nhất; "Ngày trước" đi tới index lớn hơn
     document.getElementById('reportPrev').disabled = reportIndex >= reportList.length - 1;
     document.getElementById('reportNext').disabled = reportIndex <= 0;
@@ -420,6 +575,7 @@ async function openAnalysisModal() {
 
 // Close modal
 function closeAnalysisModal() {
+    closeReportCal();
     const modal = document.getElementById('analysisModal');
     modal.classList.add('hidden');
 }
@@ -448,6 +604,39 @@ document.addEventListener('DOMContentLoaded', function () {
     if (nextBtn) nextBtn.addEventListener('click', () => showReportAt(reportIndex - 1));
     if (latestBtn) latestBtn.addEventListener('click', () => showReportAt(0));
     if (dateSelect) dateSelect.addEventListener('change', () => showReportAt(parseInt(dateSelect.value, 10)));
+    const calBtn = document.getElementById('reportCalBtn');
+    if (calBtn) calBtn.addEventListener('click', openReportCal);
+    const calPrev = document.getElementById('rcalPrev');
+    const calNext = document.getElementById('rcalNext');
+    if (calPrev) calPrev.addEventListener('click', () => shiftReportCal(-1));
+    const markForm = document.getElementById('rcalMarkForm');
+    if (markForm) {
+        markForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const from = document.getElementById('rmFrom').value;
+            const to = document.getElementById('rmTo').value;
+            const r = await sendJSON('/statistic/marks', 'POST', {
+                from, to: to || undefined,
+                name: document.getElementById('rmName').value,
+                age: document.getElementById('rmAge').value,
+                color: document.getElementById('rmColor').value,
+            });
+            if (!r.success) { setMarkMsg(r.error || 'Không lưu được', true); return; }
+            await loadDayMarks(); renderReportCal(); renderMarkLegend();
+            setMarkMsg(`Đã đánh dấu ${r.count} ngày.`);
+        });
+        document.getElementById('rmDelete').addEventListener('click', async () => {
+            const from = document.getElementById('rmFrom').value;
+            const to = document.getElementById('rmTo').value;
+            if (!from) { setMarkMsg('Hãy chọn ngày cần xóa đánh dấu', true); return; }
+            const q = `?from=${from}${to ? `&to=${to}` : ''}`;
+            const r = await sendJSON('/statistic/marks' + q, 'DELETE');
+            if (!r.success) { setMarkMsg(r.error || 'Không xóa được', true); return; }
+            await loadDayMarks(); renderReportCal(); renderMarkLegend();
+            setMarkMsg(`Đã xóa đánh dấu ${r.count} ngày.`);
+        });
+    }
+    if (calNext) calNext.addEventListener('click', () => shiftReportCal(1));
 
     // Open modal on button click
     if (analysisBtn) {

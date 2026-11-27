@@ -482,7 +482,7 @@ class SleepAnalysisService {
         const sleepDurationHours = sleepStat.totalSleepHours ||
             ((sleepStat.endTime - sleepStat.startTime) / (1000 * 60 * 60)).toFixed(1);
 
-        const reportDate = new Date(sleepStat.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        const reportDate = new Date(sleepStat.startTime).toLocaleDateString('vi-VN');
 
         return `
 # PHÂN TÍCH GIẤC NGỦ - ${reportDate}
@@ -563,7 +563,7 @@ class SleepAnalysisService {
                 lightSleepPercent, deepSleepPercent, wakingSleepPercent,
                 sleepEfficiency, environmentScore, physiologyScore, overallScore, qualityLevel,
                 aiAnalysis, recommendations
-            ) VALUES (?, ?, date(?, 'unixepoch', '+7 hours'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, date(?, 'unixepoch'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         // Trích xuất khuyến nghị từ AI analysis (đơn giản)
